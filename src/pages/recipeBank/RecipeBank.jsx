@@ -1,3 +1,5 @@
+import RecipeBankService from '../../services/RecipeBankService';
+
 const RecipeBank = () => {
   return (
     <div>
