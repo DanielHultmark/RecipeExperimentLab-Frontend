@@ -12,7 +12,7 @@ import AddIcon from "@mui/icons-material/Add";
 import RecipeCard from "../../components/recipeCard/RecipeCard";
 import { recipeService } from "../../services/RecipeService";
 
-const RecipeBank = ({ user, onNavigate }) => {
+const RecipeBank = ({ user, onNavigate, onEdit }) => {
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -33,7 +33,7 @@ const RecipeBank = ({ user, onNavigate }) => {
       } catch (error) {
         setError(
           error.response?.data ||
-            "Kunde inte hämta recepten från servern."
+          "Kunde inte hämta recepten från servern."
         );
       } finally {
         setLoading(false);
@@ -61,14 +61,33 @@ const RecipeBank = ({ user, onNavigate }) => {
     );
   }
 
+  async function handleDelete(recipeId) {
+    try {
+      setError("");
+
+      await recipeService.remove(recipeId);
+
+      setRecipes((currentRecipes) =>
+        currentRecipes.filter((recipe) => recipe.id !== recipeId)
+      );
+    } catch (error) {
+      setError(
+        error.response?.data ||
+        "Kunde inte radera receptet."
+      );
+    }
+  }
+
   return (
     <Box>
       <Stack
         direction={{ xs: "column", sm: "row" }}
-        justifyContent="space-between"
-        alignItems={{ xs: "flex-start", sm: "center" }}
         spacing={2}
-        sx={{ mb: 4 }}
+        sx={{
+          mb: 4,
+          justifyContent: "space-between",
+          alignItems: { xs: "flex-start", sm: "center" },
+        }}
       >
         <Box>
           <Typography variant="h4" component="h1">
@@ -126,7 +145,12 @@ const RecipeBank = ({ user, onNavigate }) => {
           }}
         >
           {recipes.map((recipe) => (
-            <RecipeCard key={recipe.id} recipe={recipe} />
+            <RecipeCard
+              key={recipe.id}
+              recipe={recipe}
+              onEdit={onEdit}
+              onDelete={handleDelete}
+            />
           ))}
         </Box>
       )}

@@ -8,7 +8,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { accountService } from "../../services/accountService";
+import { accountService } from "../../services/AccountService";
 
 const RegisterForm = ({ onLogin }) => {
   const [fullName, setFullName] = useState("");

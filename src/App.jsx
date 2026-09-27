@@ -9,17 +9,20 @@ import {
   Typography,
 } from "@mui/material";
 import "./App.css";
-import { accountService } from "./services/accountService";
+import { accountService } from "./services/AccountService";
 import LandingPage from "./pages/landingPage/LandingPage";
 import Login from "./pages/login/Login";
 import RegisterPage from "./pages/registerPage/RegisterPage";
 import RecipeBank from "./pages/recipeBank/RecipeBank";
 import Create from "./pages/create/Create";
 import AdminPage from "./pages/admin/AdminPage";
+import Edit from "./pages/edit/Edit";
+import Dashboard from "./pages/dashboard/Dashboard";
 
 function App() {
   const [page, setPage] = useState("home");
   const [user, setUser] = useState(null);
+  const [selectedRecipeId, setSelectedRecipeId] = useState(null);
 
   useEffect(() => {
     accountService
@@ -44,6 +47,11 @@ function App() {
 
   const isAdmin = user?.roles?.includes("Admin");
 
+  const handleEditRecipe = (recipeId) => {
+    setSelectedRecipeId(recipeId);
+    setPage("edit");
+  };
+
   const showPage = () => {
     switch (page) {
       case "login":
@@ -53,11 +61,11 @@ function App() {
         return <RegisterPage onLogin={handleLogin} onNavigate={setPage} />;
 
       case "recipes":
-        return <RecipeBank user={user} onNavigate={setPage} />;
+        return <RecipeBank user={user} onNavigate={setPage} onEdit={handleEditRecipe} />;
 
       case "create":
         return user
-          ? <Create onNavigate={setPage} />
+          ? <Create user={user} onNavigate={setPage} />
           : <Login onLogin={handleLogin} onNavigate={setPage} />;
 
       case "admin":
@@ -65,8 +73,20 @@ function App() {
           ? <AdminPage />
           : <RecipeBank user={user} onNavigate={setPage} />;
 
+      case "dashboard":
+        return user
+          ? <Dashboard user={user} onNavigate={setPage} />
+          : <Login onLogin={handleLogin} onNavigate={setPage} />;
+
+      case "edit":
+        return user
+          ? <Edit recipeId={selectedRecipeId} onNavigate={setPage} />
+          : <Login onLogin={handleLogin} onNavigate={setPage} />;
+
       default:
-        return <LandingPage onNavigate={setPage} />;
+        return user
+          ? <Dashboard user={user} onNavigate={setPage} />
+          : <LandingPage onNavigate={setPage} />;
     }
   };
 
@@ -82,7 +102,7 @@ function App() {
             Recipe Experiments Lab
           </Typography>
 
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
             <Button color="inherit" onClick={() => setPage("recipes")}>
               Recept
             </Button>
