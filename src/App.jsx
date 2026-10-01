@@ -91,8 +91,12 @@ function App() {
   };
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "grey.100" }}>
-      <AppBar position="sticky">
+    <Box sx={{ minHeight: "100vh", bgcolor: "#F3F7F1" }}>
+      <AppBar position="sticky"
+        sx={{
+          bgcolor: "#1F4D36",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.12)",
+        }}>
         <Toolbar>
           <Typography
             variant="h6"
@@ -140,7 +144,11 @@ function App() {
         </Toolbar>
       </AppBar>
 
-      <Container component="main" maxWidth="lg" sx={{ py: 5 }}>
+      <Container
+        component="main"
+        maxWidth="lg"
+        sx={{ py: page === "home" && !user ? 0 : 5 }}
+      >
         {showPage()}
       </Container>
     </Box>
