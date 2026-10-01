@@ -21,7 +21,7 @@ export default function Create({ user, onNavigate }) {
         </Typography>
       </Box>
 
-      <RecipeForm onCreated={() => onNavigate("recipes")} />
+      <RecipeForm onSaved={() => onNavigate("recipes")} />
     </Container>
   );
 }
