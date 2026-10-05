@@ -1,0 +1,113 @@
+name: Publish to Azure (free tier)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: azure-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_CORE_ONLY_SHOW_ERRORS: 'true'
+      APP_NAME: recipeexperimentlab-dh-0926
+      RESOURCE_GROUP: rg-recipeexperimentlab
+      SITE_URL: https://recipeexperimentlab-dh-0926-chdubmb0eha4dges.swedencentral-01.azurewebsites.net
+    steps:
+      - name: Check out backend main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DanielHultmark/RecipeExperimentLab
+          ref: main
+          path: backend
+          persist-credentials: false
+      - name: Check out frontend main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: DanielHultmark/RecipeExperimentLab-Frontend
+          ref: main
+          path: frontend
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Set up .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify database migration baseline
+        run: python3 backend/deployment/check-migrations.py
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: /api
+        run: |
+          npm ci
+          npm run build
+      - name: Build backend and check model
+        run: |
+          dotnet publish backend/RecipeExperimentLab.csproj -c Release -o "$GITHUB_WORKSPACE/site" -p:UseAppHost=false
+          EF_VERSION=$(python3 -c 'import xml.etree.ElementTree as E; print(next(x.attrib["Version"] for x in E.parse("backend/RecipeExperimentLab.csproj").iter("PackageReference") if x.attrib["Include"] == "Microsoft.EntityFrameworkCore.Design"))')
+          dotnet tool install dotnet-ef --tool-path "$RUNNER_TEMP/ef" --version "$EF_VERSION"
+          "$RUNNER_TEMP/ef/dotnet-ef" migrations has-pending-model-changes --project backend/RecipeExperimentLab.csproj --configuration Release --no-build
+      - name: Package frontend and backend
+        run: |
+          mkdir -p site/wwwroot
+          cp -a frontend/dist/. site/wwwroot/
+          python3 backend/deployment/package-settings.py
+          test -f site/web.config
+          test -f site/wwwroot/index.html
+          cd site
+          zip -q -r ../site.zip .
+      - name: Sign in to Azure without a password
+        uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac # v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Verify free tiers
+        run: |
+          test "$(az appservice plan show -g "$RESOURCE_GROUP" -n ASP-rgrecipeexperimentlab-95e6 --query sku.name -o tsv)" = F1
+          az sql db show -g "$RESOURCE_GROUP" -s sql-recipeexperimentlab-dh-0926 -n RecipeExperimentLab --query '{free:useFreeLimit,behavior:freeLimitExhaustionBehavior}' -o json | jq -e '.free == true and .behavior == "AutoPause"'
+      - name: Publish current main branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The other repository can publish at the same time. Retry a busy deployment,
+          # but never retry an older build after either main branch has moved.
+          for attempt in 1 2 3; do
+            BACKEND_HEAD=$(gh api repos/DanielHultmark/RecipeExperimentLab/commits/main --jq .sha)
+            FRONTEND_HEAD=$(gh api repos/DanielHultmark/RecipeExperimentLab-Frontend/commits/main --jq .sha)
+            if [ "$BACKEND_HEAD" != "$(git -C backend rev-parse HEAD)" ] || [ "$FRONTEND_HEAD" != "$(git -C frontend rev-parse HEAD)" ]; then
+              echo 'A newer main commit exists. Its pipeline will publish the newer build.'
+              exit 0
+            fi
+            if az webapp deploy -g "$RESOURCE_GROUP" -n "$APP_NAME" --src-path site.zip --type zip --timeout 600000 -o none; then
+              echo 'DEPLOYED=true' >> "$GITHUB_ENV"
+              break
+            fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            sleep 20
+          done
+      - name: Check live site and API documentation
+        if: env.DEPLOYED == 'true'
+        run: |
+          curl --fail --silent --show-error --retry 6 --retry-delay 10 --retry-all-errors --max-time 60 "$SITE_URL/" -o /tmp/live-home.html
+          curl --fail --silent --show-error --retry 6 --retry-delay 10 --retry-all-errors --max-time 60 "$SITE_URL/openapi/v1.json" | jq -e '.openapi and .paths["/api/account/login"]'
+          curl --fail --silent --show-error --max-time 60 "$SITE_URL/scalar/v1" -o /tmp/live-scalar.html
+          echo "Published: $SITE_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "Backend: $(git -C backend rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Frontend: $(git -C frontend rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
