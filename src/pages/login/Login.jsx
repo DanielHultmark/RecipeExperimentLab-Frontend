@@ -1,10 +1,10 @@
-import Loginform from '../../components/loginform/Loginform';
+import Loginform from '../../components/loginForm/LoginForm';
 
-const Login = () => {
+const Login = ({ onLogin }) => {
   return (
     <div>
       <h1>Login</h1>
-      <Loginform />
+      <Loginform onLogin={onLogin} />
     </div>
   );
 };
